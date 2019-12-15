@@ -3,8 +3,8 @@ python main.py --exp_name simplified_bt --transformer True --langs can,man --n_m
 	--para_dataset "can-man:,../../data/Cantonese_Mandarin_chs/para/dev.XX.txt.pth,../../data/Cantonese_Mandarin_chs/para/tst.XX.txt.pth" \
 	--mono_directions can,man \
 	--pivo_directions can-man-can,man-can-man \
-	--pretrained_emb "../../data/Cantonese_Mandarin_chs/train.can.448.vec,../../data/Cantonese_Mandarin_chs/train.man.448.vec" \
-	--pretrained_shared_emb "../../data/Cantonese_Mandarin_chs/train.joint.64.vec" \
+	--pretrained_emb "../../data/Cantonese_Mandarin_chs/train.can.256.vec,../../data/Cantonese_Mandarin_chs/train.man.256.vec" \
+	--pretrained_shared_emb "../../data/Cantonese_Mandarin_chs/train.joint.256.vec" \
 	--vocab "can:../../data/Cantonese_Mandarin_chs/vocab.joint.txt;man:../../data/Cantonese_Mandarin_chs/vocab.joint.txt" \
 	--pretrained_out True \
 	--otf_num_processes 8 \
@@ -28,6 +28,6 @@ python main.py --exp_name simplified_bt --transformer True --langs can,man --n_m
 	--dropout 0.1 \
 	--relu_dropout 0.1 \
 	--attention_dropout 0.1 \
-	--shared_emb_dim 64 \
+	--shared_emb_dim 256 \
 	--dump_path "./"
 
