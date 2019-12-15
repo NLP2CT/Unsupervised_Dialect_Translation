@@ -1,4 +1,4 @@
-# AAAI20 Unsupervised Neural Dialect Translation with Commonality and Diversity Modeling
+# AAAI2020 - Unsupervised Neural Dialect Translation with Commonality and Diversity Modeling
 
 This repository contains the source code of related research "Unsupervised Neural Dialect Translation with Commonality and Diversity Modeling".
 
