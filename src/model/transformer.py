@@ -84,6 +84,7 @@ class TransformerEncoder(nn.Module):
         assert type(lang_id) is int
 
         embed_tokens = self.embeddings[lang_id]
+        encoder_out = []
 
         # embed tokens and positions
         x = torch.cat((embed_tokens(src_tokens), self.shared_embedding(src_tokens)), dim=-1).mul(self.embed_scale)
@@ -97,6 +98,7 @@ class TransformerEncoder(nn.Module):
         # encoder layers
         for layer in self.layers:
             x = layer[lang_id](x, encoder_padding_mask)
+            encoder_out.append(x)
 
         if self.layer_norm_after:
             x = self.layer_norm(x)
@@ -104,7 +106,7 @@ class TransformerEncoder(nn.Module):
         return LatentState(
             input_len=src_lengths,
             dec_input={
-                'encoder_out': x,  # T x B x C
+                'encoder_out': encoder_out,  # T x B x C
                 'encoder_padding_mask': encoder_padding_mask,  # B x T
             },
             dis_input=x,
@@ -168,7 +170,8 @@ class TransformerDecoder(nn.Module):
         if args.share_encdec_emb:
             self.shared_embedding = encoder.shared_embedding
         else:
-            self.shared_embedding = Embedding(args.n_words[0], args.shared_emb_dim, args.pad_index)
+            self.shared_embedding = Embedding(self.n_words[0], args.shared_emb_dim, padding_idx=self.pad_index)
+
         self.embed_scale = math.sqrt(self.emb_dim)
         self.embed_positions = PositionalEmbedding(
             1024, self.emb_dim, self.pad_index,
@@ -214,7 +217,7 @@ class TransformerDecoder(nn.Module):
         # self.proj = nn.ModuleList(proj)
 
         self.proj = SharedProjection(self.n_words[0], self.emb_dim, args.shared_emb_dim, self.n_langs, args.pad_index,
-                                     encoder.shared_embedding, encoder.embeddings)
+                                     encoder.shared_embedding, encoder.embeddings, args.share_decpro_emb)
 
         if args.encoder_normalize_before:
             self.layer_norm_after = True
@@ -243,10 +246,10 @@ class TransformerDecoder(nn.Module):
         x = F.dropout(x, p=self.dropout, training=self.training)
 
         # decoder layers
-        for layer in self.layers:
+        for i, layer in enumerate(self.layers):
             x, attn = layer[lang_id](
                 x,
-                encoder_out['encoder_out'],
+                encoder_out['encoder_out'][i],
                 encoder_out['encoder_padding_mask'],
                 incremental_state=incremental_state,
             )
@@ -301,16 +304,16 @@ class TransformerDecoder(nn.Module):
         latent = encoder_out['encoder_out']
 
         x_len = encoded.input_len
-        is_cuda = latent.is_cuda
+        is_cuda = all(x.is_cuda for x in latent)
         one_hot = None
 
         # check inputs
         assert type(lang_id) is int
-        assert latent.size() == (x_len.max(), x_len.size(0), self.emb_dim)
+        assert all(x.size() == (x_len.max(), x_len.size(0), self.emb_dim) for x in latent)
         assert (sample is True) ^ (temperature is None)
 
         # initialize generated sentences batch
-        slen, bs = latent.size(0), latent.size(1)
+        slen, bs = latent[0].size(0), latent[0].size(1)
         assert x_len.max() == slen and x_len.size(0) == bs
         cur_len = 1
         decoded = torch.LongTensor(max_len, bs).fill_(self.pad_index)
@@ -527,7 +530,7 @@ def Linear(in_features, out_features, bias=True):
 
 class SharedProjection(nn.Module):
     def __init__(self, num_embeddings, embedding_dim, shared_embedding_dim, n_lang, padding_idx,
-                 pretrained_shared_embs, pretrained_private_embs):
+                 pretrained_shared_embs, pretrained_private_embs, share_decpro_emb):
         super().__init__()
         self.num_embeddings = num_embeddings
         self.embedding_dim = embedding_dim
@@ -538,15 +541,8 @@ class SharedProjection(nn.Module):
         self.shared_proj = nn.Linear(shared_embedding_dim, num_embeddings, False)
         self.private_proj = nn.ModuleList(list(nn.Linear(embedding_dim - shared_embedding_dim, num_embeddings, False) for _ in range(0, self.n_lang)))
 
-        if pretrained_shared_embs is None:
-            nn.init.xavier_uniform_(self.shared_proj.weight)
-        else:
+        if share_decpro_emb:
             self.shared_proj.weight = pretrained_shared_embs.weight
-
-        if pretrained_private_embs is None:
-            for private_proj in self.private_proj:
-                nn.init.xavier_uniform_(private_proj.weight)
-        else:
             for private_proj, pretrained_private_emb in zip(self.private_proj, pretrained_private_embs):
                 private_proj.weight = pretrained_private_emb.weight
 
